@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drivers and Constructors Bar Chart</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <link rel="stylesheet" href="css.css">
+</head>
+<body>
+  <h1>Formula 1 Constructors and Drivers points comparison </h1>
+    <div class="button-container">
+        <button onclick="updateCharts(2020)">2020</button>
+        <button onclick="updateCharts(2021)">2021</button>
+        <button onclick="updateCharts(2022)">2022</button>
+        <button onclick="updateCharts(2023)">2023</button>
+        <button onclick="updateCharts(2024)">2024</button>
+    </div>
+    <div class="chart-container">
+        <div id="driver-chart" class="chart"></div>
+        <div id="constructor-chart" class="chart"></div>
+    </div>
+    <div id="tooltip" class="tooltip" style="opacity:0;"></div>
+    <script>
+        // Set the dimensions and margins of the graphs
+        const margin = {top: 20, right: 30, bottom: 60, left: 90},
+            width = 800 - margin.left - margin.right,
+            height = 400 - margin.top - margin.bottom;
+
+        // Append the svg object for the driver chart
+        const svgDriver = d3.select("#driver-chart")
+          .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Append the svg object for the constructor chart
+        const svgConstructor = d3.select("#constructor-chart")
+          .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Load the CSV data for drivers and constructors
+        Promise.all([
+            d3.csv("drivers.csv"),
+            d3.csv("constructors.csv")
+        ]).then(function(files) {
+            const driverData = files[0];
+            const constructorData = files[1];
+
+            // Function to update the charts based on the selected year
+            window.updateCharts = function(year) {
+                // Filter driver data for the selected year
+                const filteredDriverData = driverData.filter(d => d.year == year);
+                filteredDriverData.forEach(function(d) {
+                    d.totalPoints = +d.totalPoints;
+                });
+
+                // Filter constructor data for the selected year
+                const filteredConstructorData = constructorData.filter(d => d.year == year);
+                filteredConstructorData.forEach(function(d) {
+                    d.totalPoints = +d.totalPoints;
+                });
+
+                // Sort data in decreasing order
+                filteredDriverData.sort((a, b) => b.totalPoints - a.totalPoints);
+                filteredConstructorData.sort((a, b) => b.totalPoints - a.totalPoints);
+
+                // Update the driver chart
+                updateChart(svgDriver, filteredDriverData, "driverName", "Driver Name", "Total Points");
+
+                // Update the constructor chart
+                updateChart(svgConstructor, filteredConstructorData, "constructorName", "Constructor Name", "Total Points");
+            }
+
+            // Function to update a chart
+            function updateChart(svg, data, nameField, xAxisLabel, yAxisLabel) {
+                // Update the X axis
+                const x = d3.scaleBand()
+                    .range([0, width])
+                    .domain(data.map(d => d[nameField]))
+                    .padding(0.2);
+                svg.selectAll(".x-axis").remove();
+                svg.append("g")
+                    .attr("class", "x-axis")
+                    .attr("transform", `translate(0,${height})`)
+                    .call(d3.axisBottom(x))
+                    .selectAll("text")
+                        .attr("transform", "translate(-10,0)rotate(-45)")
+                        .style("text-anchor", "end");
+
+                // Add X axis label
+                svg.selectAll(".x-axis-label").remove();
+                svg.append("text")
+                    .attr("class", "x-axis-label")
+                    .attr("text-anchor", "end")
+                    .attr("x", width / 2)
+                    .attr("y", height + margin.bottom +30)
+                    .text(xAxisLabel);
+
+                // Update the Y axis
+                const y = d3.scaleLinear()
+                    .domain([0, d3.max(data, d => d.totalPoints)])
+                    .range([height, 0]);
+                svg.selectAll(".y-axis").remove();
+                svg.append("g")
+                    .attr("class", "y-axis")
+                    .call(d3.axisLeft(y));
+
+                // Add Y axis label
+                svg.selectAll(".y-axis-label").remove();
+                svg.append("text")
+                    .attr("class", "y-axis-label")
+                    .attr("text-anchor", "end")
+                    .attr("transform", "rotate(-90)")
+                    .attr("x", -height / 2)
+                    .attr("y", -margin.left + 20)
+                    .text(yAxisLabel);
+
+                // Update the bars
+                const bars = svg.selectAll(".bar")
+                    .data(data);
+
+                bars.enter()
+                    .append("rect")
+                    .attr("class", "bar")
+                    .attr("x", d => x(d[nameField]))
+                    .attr("y", height) // Start from the bottom
+                    .attr("width", x.bandwidth())
+                    .attr("height", 0) // Start with height 0
+                    .merge(bars)
+                    .transition()
+                    .duration(1000) // Transition duration
+                    .attr("x", d => x(d[nameField]))
+                    .attr("y", d => y(d.totalPoints))
+                    .attr("width", x.bandwidth())
+                    .attr("height", d => height - y(d.totalPoints));
+
+                bars.exit().remove();
+
+                // Add tooltips
+                svg.selectAll(".bar")
+                    .on("mouseover", function(event, d) {
+                        d3.select("#tooltip")
+                            .style("opacity", 1)
+                            .html(`${d[nameField]}: ${d.totalPoints} points`)
+                            .style("left", (event.pageX + 5) + "px")
+                            .style("top", (event.pageY - 28) + "px");
+                    })
+                    .on("mouseout", function(d) {
+                        d3.select("#tooltip")
+                            .style("opacity", 0);
+                    });
+            }
+
+            // Initialize the charts with the year 2020
+            updateCharts(2020);
+        }).catch(function(error) {
+            console.error('Error loading or parsing data:', error);
+        });
+    </script>
+</body>
+</html>
